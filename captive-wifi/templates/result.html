@@ -1,0 +1,17 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Connection Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% if success %}
+        <h2>✅ Connected successfully!</h2>
+    {% else %}
+        <h2>❌ Failed to connect.</h2>
+    {% endif %}
+    <p>{{ message }}</p>
+    <a href="/">Try Again</a>
+</body>
+</html>

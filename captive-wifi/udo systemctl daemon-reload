@@ -1,0 +1,13 @@
+[0;1;31m×[0m static_wifi.service - Static hidden wifi
+     Loaded: loaded (]8;;file://tc/etc/systemd/system/static_wifi.service/etc/systemd/system/static_wifi.service]8;;; [0;1;32menabled[0m; preset: [0;1;32menabled[0m)
+     Active: [0;1;31mfailed[0m (Result: exit-code) since Sat 2025-07-26 12:38:57 CEST; 1min 32s ago
+   Duration: 2ms
+    Process: 2161 ExecStart=/usr/sbin/hostapd /etc/hostapd/staticWifi.hostapd.conf [0;1;31m(code=exited, status=200/CHDIR)[0m
+   Main PID: 2161 (code=exited, status=200/CHDIR)
+        CPU: 2ms
+
+Jul 26 12:38:57 tc systemd[1]: static_wifi.service: Scheduled restart job, restart counter is at 5.
+Jul 26 12:38:57 tc systemd[1]: Stopped static_wifi.service - Static hidden wifi.
+Jul 26 12:38:57 tc systemd[1]: [0;1;38;5;185m[0;1;39m[0;1;38;5;185mstatic_wifi.service: Start request repeated too quickly.[0m
+Jul 26 12:38:57 tc systemd[1]: [0;1;38;5;185m[0;1;39m[0;1;38;5;185mstatic_wifi.service: Failed with result 'exit-code'.[0m
+Jul 26 12:38:57 tc systemd[1]: [0;1;31m[0;1;39m[0;1;31mFailed to start static_wifi.service - Static hidden wifi.[0m

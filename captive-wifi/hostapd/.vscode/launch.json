@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Debug with sudo",
+      "type": "python",
+      "request": "launch",
+      "program": "captive_protal.py",
+      "console": "integratedTerminal",
+      "args": [
+        "sudo",
+        "${workspaceFolder}/venv/bin/python",
+        "captive_protal.py"
+      ]
+    }
+  ]
+}
