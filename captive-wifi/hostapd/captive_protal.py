@@ -199,6 +199,7 @@ def stop_captive_hotspot():
 
 def create_wpa_config(ssid: str, psk: str):
     config = f"""
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 ctrl_interface=/var/run/wpa_supplicant
 ctrl_interface_group=netdev
 update_config=1
@@ -214,6 +215,25 @@ network={{
     #    scan_ssid=1
     return config
     
+
+def getExpectedSSSID(filePath = "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"):
+    try: 
+        with open(filePath, "r") as file:
+            content = file.read()
+            ssid_line = re.search(r'ssid\s*=\s*".*?"', content)
+            if ssid_line:
+                print(ssid_line.group())  # Output: ssid="Rabbit Hole"
+                match = re.search(r'ssid\s*=\s*"([^"]+)"', ssid_line.group())
+                if match:
+                    ssid_value = match.group(1)
+                    print(f"Extracted SSID: {ssid_value}")
+                    return ssid_value
+                else:
+                    print("SSID not found.")
+                    return ""
+    except Exception as e:
+        print(f"⚠️ Error reading file: {e}")
+
 def connect_captive_hotspot(ssid: str, psk: str):
     stop_captive_hotspot()
     logExecutedShell(["sudo", "systemctl", "unmask", "wpa_supplicant@wlan0"])
@@ -221,20 +241,19 @@ def connect_captive_hotspot(ssid: str, psk: str):
     config = create_wpa_config(ssid, psk)
     filePath = "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
     with open(filePath, "w") as file:
-        file.write(config)
-        logExecutedShell(["sudo", "chmod", "600", "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"])
         log(f"wpa_config file {filePath} written")
         print(f"config {config}")
         logExecutedShell(["sudo", "ip", "link", "set", "wlan0", "up"])
         logExecutedShell(["sudo", "systemctl", "enable", "wpa_supplicant@wlan0"])
         logExecutedShell(["sudo", "systemctl", "start", "wpa_supplicant@wlan0"])
-        subprocess.run(["sudo", "systemctl", "restart", "wpa_supplicant@wlan0"])
+        file.write(config)
+        logExecutedShell(["sudo", "chmod", "600", "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"])
+        executeShellAsync(["sudo", "systemctl", "restart", "wpa_supplicant@wlan0"])
         print("🔄 Restarting wpa_supplicant@wlan0")
-
         # Wait until the control socket appears
         restarted = False
         for _ in range(40):  # up to 10 seconds
-            if os.path.exists("/var/run/wpa_supplicant/wlan0"):
+            if get_connected_ssid("wlan0", ssid):
                 print("✅ Control socket found")
                 restarted = True
             time.sleep(0.5)
@@ -326,17 +345,31 @@ def scan_networks(interface="wlan1"):
         return []
 
 
+# def get_connected_ssid(wlan_interface = "wlan0", ssid='any'):
+#     try:
+#         result = logExecutedShell(["sudo", "wpa_cli", "-i", wlan_interface, "status"])
+#         connectedSSid = 'any'
+#         print(result)
+#         if result.returncode == 0:
+#             if ssid != 'any':
+#                 connectedSSid = ssid in result.stdout
+#         return connectedSSid if ssid else "Not connected"
+#     except subprocess.CalledProcessError:
+#         return "Error retrieving SSID"
 def get_connected_ssid(wlan_interface = "wlan0", ssid='any'):
     try:
-        result = logExecutedShell(["sudo", "wpa_cli", "-i", wlan_interface, "status"])
-        connectedSSid = 'any'
+        result = logExecutedShell(["iw", "dev"])
         print(result)
-        if result.returncode == 0:
-            if ssid != 'any':
-                connectedSSid = ssid in result.stdout
+        match = re.search(r'Interface wlan0\b[\s\S]*?\n\s*ssid\s+.*$', result.stdout, re.MULTILINE)
+        if match:
+            print(match.group().strip())
+            if result.returncode == 0:
+                if ssid != 'any':
+                    connectedSSid = ssid in result.stdout
         return connectedSSid if ssid else "Not connected"
     except subprocess.CalledProcessError:
         return "Error retrieving SSID"
+ 
 
 # ===== Flask App =====
 app = Flask(__name__)
@@ -376,12 +409,14 @@ def connect():
 if __name__ == "__main__":
     try:
         log("Running main process. Press Ctrl+C to interrupt.")
-        log("Connected to: " + get_connected_ssid("wlan0"))
+        ssid = getExpectedSSSID()
+        print(ssid)
+        log("Connected to: " + get_connected_ssid("wlan0", ssid))
         initNetworkServices()
         stop_static_hotspot()
         stop_captive_hotspot()
         start_captive_hotspot()
-        start_static_hotspot()
+        # start_static_hotspot()
     
         app.run(host=FLASK_HOST, port=FLASK_PORT)
 
