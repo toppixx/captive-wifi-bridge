@@ -197,7 +197,7 @@ def stop_captive_hotspot():
             log("stop_captive_hotspot: killed process failed!!")
             pass
 
-def create_wpa_config(ssid: str, psk: str"):
+def create_wpa_config(ssid: str, psk: str):
     config = f"""
 ctrl_interface=/var/run/wpa_supplicant
 ctrl_interface_group=netdev
@@ -322,7 +322,7 @@ def scan_networks(interface="wlan1"):
         return result
 
     except subprocess.CalledProcessError as e:
-        log("Error scanning Wi-Fi:", e)
+        log(f"Error scanning Wi-Fi: {e}")
         return []
 
 
