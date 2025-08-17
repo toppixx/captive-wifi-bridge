@@ -2,16 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: Debug with sudo",
+      "name": "Python: sudo workaround",
       "type": "python",
       "request": "launch",
-      "program": "captive_protal.py",
-      "console": "integratedTerminal",
+      "program": "/usr/bin/sudo",
       "args": [
-        "sudo",
-        "${workspaceFolder}/venv/bin/python",
-        "captive_protal.py"
-      ]
+        "python3",
+        "${workspaceFolder}/captive_protal.py"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

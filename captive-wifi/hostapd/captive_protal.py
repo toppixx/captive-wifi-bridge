@@ -167,6 +167,7 @@ def get_hostapd_pid(configPath):
 def start_static_hotspot():
     logExecutedShell(["sudo", "ip", "link", "set", "wlan0", "up"])
     executeShellAsync(["sudo", "hostapd", STATIC_WIFI_CONFIG_SRC])
+    log(" ".join(["sudo", "hostapd", STATIC_WIFI_CONFIG_SRC]))
 
 def stop_static_hotspot():
     # Get pid of the static hotspot
@@ -182,6 +183,7 @@ def stop_static_hotspot():
 
 def start_captive_hotspot():
     logExecutedShell(["sudo", "ip", "link", "set", "wlan1", "up"])
+    log(" ".join(["sudo", "hostapd", CAPTICE_WIFI_CONFIG_SRC]))
     executeShellAsync(["sudo", "hostapd", CAPTICE_WIFI_CONFIG_SRC])
 
 def stop_captive_hotspot():
@@ -195,16 +197,17 @@ def stop_captive_hotspot():
             log("stop_captive_hotspot: killed process failed!!")
             pass
 
-def create_wpa_config(ssid: str, psk: str, filename: str = "wpa_supplicant.conf"):
+def create_wpa_config(ssid: str, psk: str"):
     config = f"""
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=netdev
 update_config=1
 country=DE
 
 network={{
     ssid="{ssid}"
     psk="{psk}"
-    key_mgmt=WPA-PSK
+    # key_mgmt=WPA-PSK
 }}
 """
     # add this to the config if ssid is hidden
@@ -212,27 +215,70 @@ network={{
     return config
     
 def connect_captive_hotspot(ssid: str, psk: str):
-    logExecutedShell(["sudo", "systemctl", "unmask", "wpa_supplicant@wlan0"])
-    logExecutedShell(["sudo", "ip", "link", "set", "wlan0", "up"])
-    logExecutedShell(["sudo", "systemctl", "start", "wpa_supplicant@wlan0"])
-    logExecutedShell(["sudo", "systemctl", "enable", "wpa_supplicant@wlan0"])
     stop_captive_hotspot()
+    logExecutedShell(["sudo", "systemctl", "unmask", "wpa_supplicant@wlan0"])
+    logExecutedShell(["sudo", "systemctl", "stop", "wpa_supplicant@wlan0"])
     config = create_wpa_config(ssid, psk)
-    filePath = "/etc/wpa_supplicant.conf"
+    filePath = "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"
     with open(filePath, "w") as file:
         file.write(config)
-        logExecutedShell(["sudo", "chmod", "600", "/etc/wpa_supplicant.conf"])
+        logExecutedShell(["sudo", "chmod", "600", "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf"])
         log(f"wpa_config file {filePath} written")
-        result = logExecutedShell(["sudo", "dhclient", "wlan0"])
-        if result.returncode == 0:
+        print(f"config {config}")
+        logExecutedShell(["sudo", "ip", "link", "set", "wlan0", "up"])
+        logExecutedShell(["sudo", "systemctl", "enable", "wpa_supplicant@wlan0"])
+        logExecutedShell(["sudo", "systemctl", "start", "wpa_supplicant@wlan0"])
+        subprocess.run(["sudo", "systemctl", "restart", "wpa_supplicant@wlan0"])
+        print("🔄 Restarting wpa_supplicant@wlan0")
+
+        # Wait until the control socket appears
+        restarted = False
+        for _ in range(40):  # up to 10 seconds
+            if os.path.exists("/var/run/wpa_supplicant/wlan0"):
+                print("✅ Control socket found")
+                restarted = True
+            time.sleep(0.5)
+        if restarted == False:
+            print("❌ Control socket not found")
+
+        if restarted == True:
+            result = subprocess.run(
+                ["sudo", "wpa_cli", "-i", "wlan0", "status"],
+                capture_output=True,
+                text=True
+            )
+            print("📶 wpa_cli output:\n", result.stdout)
+        else:
+            print("⚠️ Cannot run wpa_cli: control socket missing")
+        # result = logExecutedShell(["sudo", "dhclient", "wlan0"])
+        # if result.returncode == 0:
+        if True :
             log("checking for connected wifis")
-            connectedSsid = get_connected_ssid()
+            connectedSsid = get_connected_ssid("wlan0", ssid)
             log(f"WPA wifi connected to ({connectedSsid})")
             log(f"WPA wifi ({ssid}) connection configured")
         else:
             log(f"WPA wifi ({ssid}) connection failed:\nstdOut: {str(result.stdout)}\nstdErr: {str(result.stderr)}\nresultCode: {result.returncode}")
-        return result.returncode
+        # return result.returncode
+        return 0
     return -1
+
+def getWifiSsidName(file_path):
+    if not os.path.isfile(file_path):
+        print(f"❌ File not found: {file_path}")
+        return
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            match = re.search(r'^ssid=(.+)$', content, re.MULTILINE)
+            if match:
+                ssid_value = match.group(1)
+                print(f"📶 SSID: {ssid_value}")
+                return ssid_value
+            else:
+                print("❌ SSID not found.")
+    except Exception as e:
+        print(f"⚠️ Error reading file: {e}")
 
 def scan_networks(interface="wlan1"):
     try:
@@ -243,6 +289,11 @@ def scan_networks(interface="wlan1"):
         output = subprocess.check_output(["sudo", "iw", "dev", interface, "scan"], text=True)
         # output2 = subprocess.check_output(["sudo", "ip", "link", "set", "wlan1", "down"])
 
+        static_ssid = getWifiSsidName(STATIC_WIFI_CONFIG_SRC)
+        print(f"static_ssid  {static_ssid}")
+        captive_ssid = getWifiSsidName(CAPTICE_WIFI_CONFIG_SRC)
+        print(f"captive_ssid  {captive_ssid}")
+        networksToHide = [static_ssid, captive_ssid]
 
         # Parse the output for SSIDs and signal strength
         # log(output)
@@ -254,7 +305,7 @@ def scan_networks(interface="wlan1"):
             if ssid_match and signal_match:
                 ssid = ssid_match.group(1)
                 signal = float(signal_match.group(1))
-                if ssid != "captcher_wifi" and ssid != "static_cloud":
+                if not ssid in networksToHide:
                     networks.append((ssid, signal))
 
         # Sort by signal strength (descending)
@@ -275,16 +326,15 @@ def scan_networks(interface="wlan1"):
         return []
 
 
-def get_connected_ssid():
+def get_connected_ssid(wlan_interface = "wlan0", ssid='any'):
     try:
-        result = subprocess.run(
-            ["iwgetid", "-r"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        ssid = result.stdout.strip()
-        return ssid if ssid else "Not connected"
+        result = logExecutedShell(["sudo", "wpa_cli", "-i", wlan_interface, "status"])
+        connectedSSid = 'any'
+        print(result)
+        if result.returncode == 0:
+            if ssid != 'any':
+                connectedSSid = ssid in result.stdout
+        return connectedSSid if ssid else "Not connected"
     except subprocess.CalledProcessError:
         return "Error retrieving SSID"
 
@@ -307,6 +357,7 @@ def connect():
     log(ssid)
     log("******")
     code = connect_captive_hotspot(ssid, psk)
+    code = 0
     if code == 0:
         stop_captive_hotspot()
         return render_template_string(
@@ -325,10 +376,10 @@ def connect():
 if __name__ == "__main__":
     try:
         log("Running main process. Press Ctrl+C to interrupt.")
-        log("Connected to: " + get_connected_ssid())
+        log("Connected to: " + get_connected_ssid("wlan0"))
         initNetworkServices()
-        # stop_static_hotspot()
-        # stop_captive_hotspot()
+        stop_static_hotspot()
+        stop_captive_hotspot()
         start_captive_hotspot()
         start_static_hotspot()
     
